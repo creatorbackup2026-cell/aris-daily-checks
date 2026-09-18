@@ -57,13 +57,17 @@ const TEST_ZIP = '11201'; // confirmed on the site's approved coverage list
     await page.check('input[name="service"][value="Wash & Fold"]');
 
     // Pickup date: open the picker, pick the first (earliest) available
-    // option.
+    // option. Scoped to #pickupDatePanel specifically — both pickers
+    // share the .date-select__option class, and once a panel closes its
+    // (now-hidden) option buttons stay in the DOM rather than being
+    // removed, so an unscoped selector can grab a leftover hidden option
+    // instead of the currently visible one.
     await page.click('#pickupDateBtn');
-    await page.click('.date-select__option:not([disabled])');
+    await page.click('#pickupDatePanel .date-select__option:not([disabled])');
 
-    // Dropoff date: same pattern.
+    // Dropoff date: same pattern, scoped to #dropoffDatePanel.
     await page.click('#dropoffDateBtn');
-    await page.click('.date-select__option:not([disabled])');
+    await page.click('#dropoffDatePanel .date-select__option:not([disabled])');
 
     // Leave a clear marker in Special Instructions too, in case anyone
     // ever looks at this order without noticing the name/phone/address.
