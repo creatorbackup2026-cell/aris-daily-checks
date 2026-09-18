@@ -22,3 +22,9 @@ jobs:
         env:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: node daily-check.js
+      - name: Upload failure screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failure-screenshot
+          path: failure.png
