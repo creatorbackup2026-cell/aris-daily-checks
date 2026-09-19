@@ -31,71 +31,62 @@ const TEST_ZIP = '11201'; // confirmed on the site's approved coverage list
   try {
     await page.goto(SITE_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
-    // The mandatory terms gate appears automatically on page load for any
-    // fresh session (no saved account) — it's not triggered by clicking
-    // "Book Now"; it shows up on its own. It's also deliberately held
-    // behind an invisible interaction blocker until an async ban-check
-    // finishes, so on a cloud server's network this can take a few extra
-    // seconds to actually appear — hence the generous 25s timeout here.
     try {
       await page.click('.js-gate-agree', { timeout: 25000 });
     } catch (e) {
       console.log('Terms gate did not appear (or already past it) — continuing.');
     }
 
-    // NOW open the booking modal, with the gate already out of the way.
     await page.click('.js-open-booking', { timeout: 15000 });
 
-    // Fill contact info.
     await page.fill('#fullName', TEST_NAME);
     await page.fill('#phone', TEST_PHONE);
     await page.fill('#address', TEST_ADDRESS);
     await page.fill('#zip', TEST_ZIP);
 
-    // Select Wash & Fold — the simplest real service, defaults to the
-    // 20lb minimum with no further input needed.
     await page.check('input[name="service"][value="Wash & Fold"]');
 
-    // Pickup date: open the picker, pick the first (earliest) available
-    // option. Scoped to #pickupDatePanel specifically — both pickers
-    // share the .date-select__option class, and once a panel closes its
-    // (now-hidden) option buttons stay in the DOM rather than being
-    // removed, so an unscoped selector can grab a leftover hidden option
-    // instead of the currently visible one.
     await page.click('#pickupDateBtn');
     await page.click('#pickupDatePanel .date-select__option:not([disabled])');
 
-    // Dropoff date: same pattern, scoped to #dropoffDatePanel.
     await page.click('#dropoffDateBtn');
     await page.click('#dropoffDatePanel .date-select__option:not([disabled])');
 
-    // Leave a clear marker in Special Instructions too, in case anyone
-    // ever looks at this order without noticing the name/phone/address.
     await page.fill('#notes', 'AUTOMATED DAILY HEALTH CHECK. Safe to ignore or delete — not a real customer.');
 
-    // Submit. If this succeeds without throwing, the real order pipeline
-    // is confirmed working end-to-end, exactly as a real customer
-    // experiences it.
+    // Pickup and dropoff time windows — both required by the site's own
+    // validate() function. Missing these causes the form to silently
+    // refuse to submit with NO visible error and no thrown exception —
+    // Playwright would see a normal, successful button click either way,
+    // which is exactly what happened on the first real run of this script.
+    await page.check('input[name="pickupWindow"][value="Morning (8-10am)"]');
+    await page.check('input[name="dropoffWindow"][value="Evening (8-10pm)"]');
+
     await page.click('#bookingSubmitBtn');
 
-    // Give the submission a moment to actually complete (network request,
-    // any on-screen confirmation) before we close the browser.
-    await page.waitForTimeout(5000);
+    // Don't just trust that the click didn't throw — that's exactly what
+    // gave a false "success" on the very first real run, when a missing
+    // required field silently blocked submission with no visible error.
+    // Wait for the real confirmation screen to actually appear, and read
+    // back the real order number it shows — genuine proof an order was
+    // created, not just that a button was clicked.
+    await page.waitForSelector('.js-confirm-view', { state: 'visible', timeout: 15000 });
+    const orderRef = await page.textContent('.js-confirm-ref');
+    if (!orderRef || !orderRef.trim()) {
+      throw new Error('Confirmation screen appeared but no order number was shown — treating as a failure.');
+    }
 
-    console.log('✅ Daily health check: order submitted successfully.');
+    console.log('✅ Daily health check: order ' + orderRef.trim() + ' submitted successfully.');
     await browser.close();
     process.exit(0);
   } catch (err) {
     console.error('❌ Daily health check FAILED:', err.message);
-    // Capture a screenshot on failure — shows up in the GitHub Actions
-    // run's artifacts, genuinely useful for seeing what the page actually
-    // looked like at the moment it broke.
     try {
       await page.screenshot({ path: 'failure.png', fullPage: true });
     } catch (screenshotErr) {
       console.error('(Could not capture failure screenshot:', screenshotErr.message, ')');
     }
     await browser.close();
-    process.exit(1); // non-zero exit — this is what makes GitHub mark the run as failed
+    process.exit(1);
   }
 })();
