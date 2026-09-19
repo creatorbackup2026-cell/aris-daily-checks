@@ -54,8 +54,13 @@ const TEST_ZIP = '11201'; // confirmed on the site's approved coverage list
 
     await page.fill('#notes', 'AUTOMATED DAILY HEALTH CHECK. Safe to ignore or delete — not a real customer.');
 
-    await page.check('input[name="pickupWindow"][value="Morning (8-10am)"]');
-    await page.check('input[name="dropoffWindow"][value="Evening (8-10pm)"]');
+    // Deliberately NOT hardcoded to a specific window (e.g. "Morning") —
+    // the site correctly disables a window once it's no longer reachable
+    // for the selected date (e.g. "Morning" for today, once today's
+    // morning has already passed), so whichever one happens to still be
+    // enabled depends on what time this script actually runs.
+    await page.locator('input[name="pickupWindow"]:not([disabled])').first().check();
+    await page.locator('input[name="dropoffWindow"]:not([disabled])').first().check();
 
     await page.click('#bookingSubmitBtn');
 
@@ -65,14 +70,6 @@ const TEST_ZIP = '11201'; // confirmed on the site's approved coverage list
       throw new Error('Confirmation screen appeared but no order number was shown — treating as a failure.');
     }
 
-    // The confirmation screen above only proves the FRONT-END logic
-    // worked — the real site deliberately fires the actual Supabase
-    // write without awaiting it (so a real customer sees instant
-    // confirmation instead of waiting on network latency), meaning it's
-    // a genuinely separate, in-flight background request at this point.
-    // Closing the browser immediately would very likely kill that
-    // request before it ever reaches the database — give it real time
-    // to land first.
     await page.waitForTimeout(8000);
 
     console.log('✅ Daily health check: order ' + orderRef.trim() + ' submitted successfully.');
