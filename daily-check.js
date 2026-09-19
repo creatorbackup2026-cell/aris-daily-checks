@@ -54,27 +54,26 @@ const TEST_ZIP = '11201'; // confirmed on the site's approved coverage list
 
     await page.fill('#notes', 'AUTOMATED DAILY HEALTH CHECK. Safe to ignore or delete — not a real customer.');
 
-    // Pickup and dropoff time windows — both required by the site's own
-    // validate() function. Missing these causes the form to silently
-    // refuse to submit with NO visible error and no thrown exception —
-    // Playwright would see a normal, successful button click either way,
-    // which is exactly what happened on the first real run of this script.
     await page.check('input[name="pickupWindow"][value="Morning (8-10am)"]');
     await page.check('input[name="dropoffWindow"][value="Evening (8-10pm)"]');
 
     await page.click('#bookingSubmitBtn');
 
-    // Don't just trust that the click didn't throw — that's exactly what
-    // gave a false "success" on the very first real run, when a missing
-    // required field silently blocked submission with no visible error.
-    // Wait for the real confirmation screen to actually appear, and read
-    // back the real order number it shows — genuine proof an order was
-    // created, not just that a button was clicked.
     await page.waitForSelector('.js-confirm-view', { state: 'visible', timeout: 15000 });
     const orderRef = await page.textContent('.js-confirm-ref');
     if (!orderRef || !orderRef.trim()) {
       throw new Error('Confirmation screen appeared but no order number was shown — treating as a failure.');
     }
+
+    // The confirmation screen above only proves the FRONT-END logic
+    // worked — the real site deliberately fires the actual Supabase
+    // write without awaiting it (so a real customer sees instant
+    // confirmation instead of waiting on network latency), meaning it's
+    // a genuinely separate, in-flight background request at this point.
+    // Closing the browser immediately would very likely kill that
+    // request before it ever reaches the database — give it real time
+    // to land first.
+    await page.waitForTimeout(8000);
 
     console.log('✅ Daily health check: order ' + orderRef.trim() + ' submitted successfully.');
     await browser.close();
