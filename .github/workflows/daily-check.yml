@@ -2,23 +2,54 @@ name: Daily Order Pipeline Check
 
 on:
   schedule:
-    - cron: '5 13 * * *'
+    - cron: '5 12 * * *'
   workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Check pause/retire status
+        id: status
+        env:
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          STATUS=$(curl -s "https://wbcorfvdnlxyxclssfde.supabase.co/rest/v1/app_settings?select=daily_check_status&id=eq.1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" | grep -o '"daily_check_status":"[^"]*"' | cut -d'"' -f4)
+          echo "Status from admin dashboard: $STATUS"
+          if [ "$STATUS" = "paused" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Daily check is paused via admin dashboard — skipping today's run."
+          elif [ "$STATUS" = "retired" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Daily check retired via admin dashboard — disabling this workflow permanently."
+            curl -s -X PUT \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/daily-check.yml/disable"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-node@v4
+        if: steps.status.outputs.skip != 'true'
         with:
           node-version: '20'
       - name: Install Playwright
+        if: steps.status.outputs.skip != 'true'
         run: |
           npm init -y
           npm install playwright
           npx playwright install --with-deps chromium
       - name: Run daily check
+        if: steps.status.outputs.skip != 'true'
         env:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: node daily-check.js
@@ -28,3 +59,12 @@ jobs:
         with:
           name: failure-screenshot
           path: failure.png
+      - name: Keep repository active (prevents GitHub's 60-day auto-disable)
+        if: always()
+        run: |
+          echo "Last run: $(date -u)" > last-run.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add last-run.txt
+          git commit -m "Keep-alive: $(date -u +%Y-%m-%d)" || echo "Nothing to commit"
+          git push
