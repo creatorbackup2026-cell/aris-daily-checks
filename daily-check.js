@@ -18,7 +18,7 @@
 
 const { chromium } = require('playwright');
 
-const SITE_URL = 'https://testingaris.netlify.app';
+const SITE_URL = 'https://arislaundry.net';
 const TEST_NAME = 'AUTOMATED DAILY TEST — DO NOT DISPATCH';
 const TEST_PHONE = '2125550000';
 const TEST_ADDRESS = '1 Test St, Brooklyn, NY';
